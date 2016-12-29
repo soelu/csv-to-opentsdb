@@ -1,7 +1,7 @@
 {
   "name": "csv-to-opentsdb",
   "version": "3.0.1",
-  "description": "Takes a CSV file an transforms and put the numeric values tagged in a running OpenTSDB instance.",
+  "description": "Takes a CSV file and puts the numeric values tagged in a running OpenTSDB instance.",
   "main": "main.js",
   "dependencies": {
     "command-line-args": "^3.0",

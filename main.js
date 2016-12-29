@@ -5,7 +5,8 @@ var csv = require("fast-csv"),
     http = require('http'),
     commandLineArgs = require('command-line-args'),
     moment = require('moment');
-    getUsage = require("command-line-usage");
+    getUsage = require("command-line-usage"),
+    createSocket = require( 'opentsdb-socket' );
 
 const cliDefinitons = [
     { name: 'help', alias: 'h', type: Boolean, description: 'Display this message.' },
@@ -13,14 +14,14 @@ const cliDefinitons = [
     { name: 'file', type: String, defaultOption: true, description: "Can also be provided as the last argument without a parameter name. The parameter is interpreted as source CSV file path."},
     { name: 'tsColumn', alias: 't', type: String, defaultValue: 'Timestamp', description: "The name of the column in the source file that holds the time. Default: 'Timestamp'"},
     { name: 'delimiter', alias: 'd', type: String, defaultValue: ';', description: "The String the delimits two columns. Default: ';'"},
-    { name: 'opentsdb-url', alias: 'u', type: String, defaultValue: 'http://127.0.0.1:4242', description: "The full URL to the OpenTSDB instance. Default: 'http://127.0.0.1:4242'"},
+    { name: 'opentsdb-url', alias: 'u', type: String, defaultValue: '127.0.0.1:4242', description: "The full URL to the OpenTSDB instance. Default: '127.0.0.1:4242'"},
     { name: 'tags', type: String, multiple: true, defaultValue: [], description: "A List of a tags to be added to each metric. Format Example: 'guid=asdf-123 user=test_user5'"}
 ];
 
 const getUsageOptions = [
     {
         header: 'csv-to-opentsdb',
-        content: 'Takes a CSV file an transforms and put the numeric values tagged in a running OpenTSDB instance.'
+        content: 'Takes a CSV file and puts the numeric values tagged in a running OpenTSDB instance.'
     },
     {
         header: 'Options',
@@ -43,6 +44,7 @@ vlog(options);
 var globalTags = {
     import:true
 };
+
 if (options.tags) {
     for (var i = options.tags.length - 1; i >= 0; i--) {
         var tagkv = options.tags[i].split('=', 2);
@@ -51,6 +53,13 @@ if (options.tags) {
         } else {
             console.warn('Could not parse tag', options.tags[i]);
         }
+    }
+}
+
+var globalTagsString = '';
+for (tagkey in globalTags) {
+    if ({}.hasOwnProperty.call(globalTags, tagkey)) {
+        globalTagsString += tagkey + '=' + globalTags[tagkey] + ' ';
     }
 }
 
@@ -63,6 +72,64 @@ if (!options.file) {
 var sourceFileName = options.file;
 
 var openTSDBQueryString = options['opentsdb-url'] + '/api/put/?details';//&sync&sync_timeout=60000'
+
+var socket = createSocket();
+
+var connectOptions = options['opentsdb-url'].split(':', 2);
+
+var port = 4242;
+var host = '127.0.0.1';
+if (connectOptions.length == 2) {
+    host = connectOptions[0];
+    port = parseInt(connectOptions[1]);
+} else {
+    host = connectOptions[0];
+}
+
+vlog('connecting to ', host, port);
+
+socket
+    .host( host)
+    .port( port )
+    .strict( false );
+
+socket.on( 'error', onError );
+socket.on( 'close', onClose );
+socket.on( 'connect', onConnect );
+
+connect();
+
+function connect() {
+    socket.connect();
+}
+
+function onError( error ) {
+    console.error( error.message );
+    console.error( error.stack );
+}
+
+function onClose() {
+    console.log( '...attempting to reconnect in 2 seconds...' );
+    setTimeout( function reconnect() {
+        connect();
+    }, 2000 );
+}
+
+function onConnect() {
+    vlog('Connected to openTSDB Socket.');
+}
+
+function onWrite() {
+    vlog( '...data written to socket...' );
+}
+
+function write(data) {
+    setTimeout( function onTimeout() {
+        if ( socket.status() ) {
+            socket.write( data, onWrite );
+        }
+    }, 60000);
+}
 
 
 // var csvStream = csv.createWriteStream({headers: true, delimiter: ";", quote:null});
@@ -120,29 +187,13 @@ function writeToOpenTSDB(row) {
 
     for (rowKey in row) {
         if (rowKey != 'timestamp' && {}.hasOwnProperty.call(row, rowKey)) {
-            dataArray.push({
-                "metric": rowKey,
-                "timestamp": row.timestamp,
-                "value": row[rowKey],
-                "tags": globalTags
-            });
+            var line = 'put ';
+            line += rowKey + ' ';
+            line += row.timestamp + ' ';
+            line += row[rowKey] + ' ';
+            line += globalTagsString;
+            line += '\n';
+            write(line);      
         }
-    } 
-
-    if (dataArray.length >= 10) {
-      request.post(
-        openTSDBQueryString,
-        { json: dataArray, agent: myAgent},
-        function (error, response, body) {
-            if (!error && response.statusCode == 200) {
-                vlog('imported ' +dataArray.length+' items.');
-                dataArray = [];
-            } else {
-                console.error('Failed to import!', error, body);
-            }
-        }
-    );  
     }
-
-    
 }
