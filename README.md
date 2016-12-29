@@ -28,6 +28,6 @@ Options
 ## Hint
 Imports are done via socket connect. So the writes are asynchronous and success messages can arrive after the csv is parsed and send completely. 
 
-## Licence
+## License
 
 MIT
