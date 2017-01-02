@@ -28,6 +28,22 @@ Options
 ## Hint
 Imports are done via socket connect. So the writes are asynchronous and success messages can arrive after the csv is parsed and send completely. 
 
+## Example
+
+### Setup
+To create a full running local setup setup use this [repo](https://github.com/soeren-lubitz/opentsdb-grafana-docker) 
+
+### Create a CSV-File in form:
+```
+	Timestamp,Foo,Bar
+	1483342774,42.1,23.2
+	1483342784,142.1,213.2
+```
+
+### Import the CSV-File:
+
+	node main.js --tags some_csv_wide_tag=some_csv_wide_tag_value -d ',' example.csv	
+
 ## License
 
 MIT
